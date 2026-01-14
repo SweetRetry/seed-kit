@@ -1,5 +1,5 @@
 {
-  "name": "ai-sdk-volcengine-adapter",
+  "name": "@sweetretry/ai-sdk-volcengine-adapter",
   "version": "0.1.0",
   "description": "Volcengine adapter for AI SDK",
   "license": "MIT",
