@@ -26,6 +26,61 @@ describe('convertToSeedResponsesInput', () => {
     ]);
   });
 
+  it('converts video file to input_video part', async () => {
+    const result = await convertToSeedResponsesInput({
+      prompt: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Describe this video.' },
+            {
+              type: 'file',
+              mediaType: 'video/mp4',
+              data: new URL('https://example.com/clip.mp4'),
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(result.warnings).toEqual([]);
+    expect(result.input).toEqual([
+      {
+        type: 'message',
+        role: 'user',
+        content: [
+          { type: 'input_text', text: 'Describe this video.' },
+          { type: 'input_video', video_url: 'https://example.com/clip.mp4' },
+        ],
+      },
+    ]);
+  });
+
+  it('converts video file with fps provider option', async () => {
+    const result = await convertToSeedResponsesInput({
+      prompt: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'file',
+              mediaType: 'video/webm',
+              data: new URL('https://example.com/clip.webm'),
+              providerOptions: { seed: { fps: 1 } },
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(result.warnings).toEqual([]);
+    expect((result.input[0] as { content: unknown[] }).content[0]).toEqual({
+      type: 'input_video',
+      video_url: 'https://example.com/clip.webm',
+      fps: 1,
+    });
+  });
+
   it('converts assistant tool calls and tool results', async () => {
     const result = await convertToSeedResponsesInput({
       prompt: [

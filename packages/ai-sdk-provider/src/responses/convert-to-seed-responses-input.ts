@@ -11,6 +11,12 @@ type SeedInputImagePart = {
   };
 };
 
+type SeedInputVideoPart = {
+  type: 'input_video';
+  video_url: string;
+  fps?: number;
+};
+
 type SeedInputItem =
   | {
       type: 'message';
@@ -18,6 +24,7 @@ type SeedInputItem =
       content: Array<
         | { type: 'input_text'; text: string }
         | SeedInputImagePart
+        | SeedInputVideoPart
         | { type: 'input_file'; file_url?: string; file_data?: string; filename?: string }
       >;
     }
@@ -65,6 +72,7 @@ export async function convertToSeedResponsesInput({
         const userContent: Array<
           | { type: 'input_text'; text: string }
           | { type: 'input_image'; image_url: string }
+          | SeedInputVideoPart
           | {
               type: 'input_file';
               file_url?: string;
@@ -107,6 +115,24 @@ export async function convertToSeedResponsesInput({
                 }
 
                 userContent.push(imagePart);
+                break;
+              }
+
+              if (part.mediaType.startsWith('video/')) {
+                const fps = part.providerOptions?.['seed']?.['fps'] as
+                  | number
+                  | undefined;
+                const videoPart: SeedInputVideoPart = {
+                  type: 'input_video',
+                  video_url:
+                    part.data instanceof URL
+                      ? part.data.toString()
+                      : `data:${part.mediaType};base64,${convertToBase64(part.data)}`,
+                };
+                if (fps != null) {
+                  videoPart.fps = fps;
+                }
+                userContent.push(videoPart);
                 break;
               }
 

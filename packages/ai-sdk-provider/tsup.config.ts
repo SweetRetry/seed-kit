@@ -1,0 +1,12 @@
+import { defineConfig } from 'tsup';
+
+export default defineConfig({
+  entry: ['src/index.ts'],
+  format: ['esm'],
+  target: 'node18',
+  dts: true,
+  clean: true,
+  sourcemap: false,
+  // Keep peer deps external
+  external: ['zod', '@ai-sdk/provider', '@ai-sdk/provider-utils'],
+});
