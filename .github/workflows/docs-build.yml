@@ -1,0 +1,37 @@
+name: Docs Build
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'apps/docs/**'
+      - 'packages/ai-sdk-provider/**'
+      - 'pnpm-lock.yaml'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'apps/docs/**'
+      - 'packages/ai-sdk-provider/**'
+      - 'pnpm-lock.yaml'
+
+jobs:
+  build:
+    name: Build Docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build docs
+        run: pnpm --filter @seed-kit/docs build
