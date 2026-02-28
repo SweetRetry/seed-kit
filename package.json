@@ -1,5 +1,5 @@
 {
-  "name": "ai-sdk-volcengine-adapter-monorepo",
+  "name": "seed-kit-monorepo",
   "private": true,
   "packageManager": "pnpm@10.20.0",
   "scripts": {

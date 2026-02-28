@@ -1,5 +1,5 @@
 {
-  "name": "docs",
+  "name": "@seed-kit/docs",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -9,7 +9,6 @@
   },
   "dependencies": {
     "fumadocs-core": "^16.6.2",
-    "fumadocs-openapi": "^10.0.0",
     "fumadocs-ui": "^16.6.6",
     "next": "^16.1.6",
     "react": "^19.2.0",
