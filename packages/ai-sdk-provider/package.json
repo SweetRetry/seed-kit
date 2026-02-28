@@ -1,5 +1,5 @@
 {
-  "name": "@seed-kit/ai-sdk-provider",
+  "name": "@seedkit-ai/ai-sdk-provider",
   "version": "0.1.5",
   "description": "Seed adapter for AI SDK",
   "license": "MIT",
@@ -35,6 +35,9 @@
     "dist",
     "README.md"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "sideEffects": false,
   "scripts": {
     "build": "swc src -d dist --config-file .swcrc --ignore '**/*.test.ts' --strip-leading-paths && tsc -p tsconfig.build.json",
@@ -64,8 +67,8 @@
     "vitest": "^4.0.16"
   },
   "dependencies": {
-    "@ai-sdk/provider": "^3.0.8",
-    "@ai-sdk/provider-utils": "^4.0.5",
+    "@ai-sdk/provider": "3.0.8",
+    "@ai-sdk/provider-utils": "4.0.15",
     "zod": "^4.3.5"
   }
 }

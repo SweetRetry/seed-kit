@@ -5,7 +5,7 @@
 ## Installation
 
 ```bash
-npm install @seed-kit/ai-sdk-provider
+npm install @seedkit-ai/ai-sdk-provider
 ```
 
 ## Setup
@@ -19,7 +19,7 @@ export ARK_API_KEY=your-api-key
 Or pass it directly when creating the provider:
 
 ```typescript
-import { createSeed } from '@seed-kit/ai-sdk-provider';
+import { createSeed } from '@seedkit-ai/ai-sdk-provider';
 
 const seed = createSeed({
   apiKey: 'your-api-key',
@@ -32,7 +32,7 @@ const seed = createSeed({
 
 ```typescript
 import { generateText } from 'ai';
-import { seed } from '@seed-kit/ai-sdk-provider';
+import { seed } from '@seedkit-ai/ai-sdk-provider';
 
 const { text } = await generateText({
   model: seed('doubao-seed-1-8-251228'),
@@ -46,7 +46,7 @@ console.log(text);
 
 ```typescript
 import { streamText } from 'ai';
-import { seed } from '@seed-kit/ai-sdk-provider';
+import { seed } from '@seedkit-ai/ai-sdk-provider';
 
 const result = streamText({
   model: seed('doubao-seed-1-8-251228'),
@@ -64,7 +64,7 @@ Enable extended thinking to get reasoning content from the model:
 
 ```typescript
 import { streamText } from 'ai';
-import { seed } from '@seed-kit/ai-sdk-provider';
+import { seed } from '@seedkit-ai/ai-sdk-provider';
 
 const result = streamText({
   model: seed('doubao-seed-1-8-251228'),
@@ -91,7 +91,7 @@ You can include PDF files in your messages:
 
 ```typescript
 import { generateText } from 'ai';
-import { seed } from '@seed-kit/ai-sdk-provider';
+import { seed } from '@seedkit-ai/ai-sdk-provider';
 import fs from 'fs';
 
 const pdfBuffer = fs.readFileSync('document.pdf');
@@ -123,7 +123,7 @@ Generate images using Seed's image models:
 
 ```typescript
 import { generateImage } from 'ai';
-import { seed } from '@seed-kit/ai-sdk-provider';
+import { seed } from '@seedkit-ai/ai-sdk-provider';
 
 const { images } = await generateImage({
   model: seed.image('doubao-seedream-4-5-251128'),
@@ -138,7 +138,7 @@ const { images } = await generateImage({
 
 ```typescript
 import { generateText } from 'ai';
-import { seed } from '@seed-kit/ai-sdk-provider';
+import { seed } from '@seedkit-ai/ai-sdk-provider';
 import { z } from 'zod';
 
 const { text, toolCalls } = await generateText({
@@ -164,7 +164,7 @@ Use the built-in web search tool:
 
 ```typescript
 import { generateText } from 'ai';
-import { seed, seedTools } from '@seed-kit/ai-sdk-provider';
+import { seed, seedTools } from '@seedkit-ai/ai-sdk-provider';
 
 const { text } = await generateText({
   model: seed('doubao-seed-1-8-251228'),
@@ -195,7 +195,7 @@ You can also use any model ID string for custom endpoints.
 ## Provider Options
 
 ```typescript
-import { createSeed } from '@seed-kit/ai-sdk-provider';
+import { createSeed } from '@seedkit-ai/ai-sdk-provider';
 
 const seed = createSeed({
   // Custom base URL (default: https://ark.cn-beijing.volces.com/api/v3)
@@ -218,7 +218,7 @@ const seed = createSeed({
 
 ```typescript
 import { generateText } from 'ai';
-import { seed } from '@seed-kit/ai-sdk-provider';
+import { seed } from '@seedkit-ai/ai-sdk-provider';
 
 const { text } = await generateText({
   model: seed('doubao-seed-1-8-251228'),

@@ -3,14 +3,14 @@ title: AI SDK Provider
 description: 在 Vercel AI SDK 中使用Seed 大模型的提供商适配器。
 ---
 
-`@seed-kit/ai-sdk-provider` 是Seed 大模型的 [Vercel AI SDK](https://sdk.vercel.ai/) 提供商，让你可以在 AI SDK 标准接口下调用Seed 系列模型的对话、图像、视频生成能力。
+`@seedkit-ai/ai-sdk-provider` 是Seed 大模型的 [Vercel AI SDK](https://sdk.vercel.ai/) 提供商，让你可以在 AI SDK 标准接口下调用Seed 系列模型的对话、图像、视频生成能力。
 
 ## 安装
 
 ```bash
-npm install @seed-kit/ai-sdk-provider
+npm install @seedkit-ai/ai-sdk-provider
 # 或
-pnpm add @seed-kit/ai-sdk-provider
+pnpm add @seedkit-ai/ai-sdk-provider
 ```
 
 ## 配置
@@ -24,7 +24,7 @@ ARK_API_KEY=your_api_key_here
 或在代码中直接传入：
 
 ```ts
-import { createSeed } from '@seed-kit/ai-sdk-provider';
+import { createSeed } from '@seedkit-ai/ai-sdk-provider';
 
 const seed = createSeed({
   apiKey: 'your_api_key_here',
@@ -34,7 +34,7 @@ const seed = createSeed({
 ## 快速开始
 
 ```ts
-import { seed } from '@seed-kit/ai-sdk-provider';
+import { seed } from '@seedkit-ai/ai-sdk-provider';
 import { generateText } from 'ai';
 
 const { text } = await generateText({
@@ -48,7 +48,7 @@ console.log(text);
 ## 流式输出
 
 ```ts
-import { seed } from '@seed-kit/ai-sdk-provider';
+import { seed } from '@seedkit-ai/ai-sdk-provider';
 import { streamText } from 'ai';
 
 const result = streamText({
@@ -64,7 +64,7 @@ for await (const chunk of result.textStream) {
 ## 图像生成
 
 ```ts
-import { seed } from '@seed-kit/ai-sdk-provider';
+import { seed } from '@seedkit-ai/ai-sdk-provider';
 import { generateImage } from 'ai';
 
 const { image } = await generateImage({
@@ -76,7 +76,7 @@ const { image } = await generateImage({
 ## 视频生成
 
 ```ts
-import { seed } from '@seed-kit/ai-sdk-provider';
+import { seed } from '@seedkit-ai/ai-sdk-provider';
 import { generateVideo } from 'ai';
 
 const { video } = await generateVideo({
