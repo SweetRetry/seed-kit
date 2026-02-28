@@ -27,6 +27,8 @@ export interface AppState {
   availableSkills: SkillEntry[];
   resumeSessions: SessionEntry[] | null;
   memoryPicker: boolean;
+  /** Current tool step number (1-based) during streaming, null when idle */
+  currentStep: number | null;
 }
 
 export type Action =
@@ -51,6 +53,7 @@ export type Action =
   | { type: 'SET_AVAILABLE_SKILLS'; skills: SkillEntry[] }
   | { type: 'SET_RESUME_SESSIONS'; sessions: SessionEntry[] | null }
   | { type: 'SET_MEMORY_PICKER'; value: boolean }
+  | { type: 'SET_STEP'; step: number }
   | { type: 'CLEAR' };
 
 export function replReducer(state: AppState, action: Action): AppState {
@@ -62,7 +65,7 @@ export function replReducer(state: AppState, action: Action): AppState {
       return { ...state, staticTurns: action.turns };
 
     case 'STREAM_START':
-      return { ...state, streaming: true, activeTurn: '', activeToolCalls: [], activeTodos: [] };
+      return { ...state, streaming: true, activeTurn: '', activeToolCalls: [], activeTodos: [], currentStep: null };
 
     case 'STREAM_TICK':
       return { ...state, activeTurn: action.text };
@@ -80,9 +83,9 @@ export function replReducer(state: AppState, action: Action): AppState {
         activeTurn: null,
         activeReasoning: null,
         activeToolCalls: [],
-        activeTodos: [],
         pendingConfirm: null,
         pendingQuestion: null,
+        currentStep: null,
       };
 
     case 'STREAM_ERROR':
@@ -95,6 +98,7 @@ export function replReducer(state: AppState, action: Action): AppState {
         activeTodos: [],
         pendingConfirm: null,
         pendingQuestion: null,
+        currentStep: null,
         staticTurns: [...state.staticTurns, { type: 'error', content: action.content }],
       };
 
@@ -147,6 +151,9 @@ export function replReducer(state: AppState, action: Action): AppState {
     case 'SET_MEMORY_PICKER':
       return { ...state, memoryPicker: action.value };
 
+    case 'SET_STEP':
+      return { ...state, currentStep: action.step };
+
     case 'CLEAR':
       return {
         ...state,
@@ -159,6 +166,7 @@ export function replReducer(state: AppState, action: Action): AppState {
         pendingConfirm: null,
         pendingQuestion: null,
         totalTokens: 0,
+        currentStep: null,
       };
   }
 }

@@ -7,9 +7,12 @@ interface StatusBarProps {
   maskedKey: string;
   /** 0–1 fraction of the 256k context window currently used (system + history) */
   contextPct?: number;
+  /** Current tool step number (1-based), null when idle */
+  currentStep?: number | null;
+  maxSteps?: number;
 }
 
-export const StatusBar = memo(function StatusBar({ version, model, maskedKey, contextPct }: StatusBarProps) {
+export const StatusBar = memo(function StatusBar({ version, model, maskedKey, contextPct, currentStep, maxSteps = 50 }: StatusBarProps) {
   const showWarn = contextPct !== undefined && contextPct >= 0.75;
   const isCritical = contextPct !== undefined && contextPct >= 0.85;
 
@@ -23,6 +26,11 @@ export const StatusBar = memo(function StatusBar({ version, model, maskedKey, co
           <Text color="cyan">{model}</Text>
         </Box>
         <Text dimColor>{maskedKey}</Text>
+        {currentStep != null && (
+          <Text color={currentStep >= maxSteps - 5 ? 'yellow' : 'dimColor'}>
+            step {currentStep}/{maxSteps}
+          </Text>
+        )}
         {showWarn && (
           <Text color={isCritical ? 'red' : 'yellow'}>
             {isCritical ? '⚠ context critical' : '⚠ context high'}{' '}

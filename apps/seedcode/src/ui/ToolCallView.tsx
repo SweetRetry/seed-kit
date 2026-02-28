@@ -41,7 +41,7 @@ export function ToolCallLine({ entry, onConfirm }: ToolCallLineProps) {
     running: '◌',
     done: '●',
     error: '✕',
-    denied: '◌',
+    denied: '✗',
   }[entry.status];
 
   const iconColor = {
@@ -59,6 +59,19 @@ export function ToolCallLine({ entry, onConfirm }: ToolCallLineProps) {
     error: 'error',
     denied: 'denied',
   }[entry.status];
+
+  // Todo tools render as compact single-line — TodoListView provides the full view
+  const isTodoTool = entry.toolName === 'todoWrite' || entry.toolName === 'todoRead';
+  if (isTodoTool) {
+    return (
+      <Box paddingX={1} gap={1}>
+        <Text color={iconColor}>{icon}</Text>
+        <Text dimColor>{entry.toolName}</Text>
+        <Text dimColor>{entry.description}</Text>
+        {statusLabel && <Text dimColor>· {statusLabel}</Text>}
+      </Box>
+    );
+  }
 
   return (
     <Box flexDirection="column" marginTop={1} paddingX={1}>

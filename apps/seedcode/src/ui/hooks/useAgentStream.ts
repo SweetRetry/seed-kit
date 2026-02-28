@@ -8,7 +8,7 @@ import type { ToolCallEntry } from '../ToolCallView.js';
 import type { Action, TurnEntry } from '../replReducer.js';
 import type { AgentContext } from './useAgentContext.js';
 
-const MAX_TOOL_STEPS = 20;
+const MAX_TOOL_STEPS = 50;
 
 const CONTEXT_LIMIT = 256_000;
 /** Start warning in StatusBar above this fraction */
@@ -165,6 +165,7 @@ export function useAgentStream({
         stopWhen: stepCountIs(MAX_TOOL_STEPS),
         ...(cfg.thinking ? { providerOptions: { seed: { thinking: true } } } : {}),
         onStepFinish: (step) => {
+          dispatch({ type: 'SET_STEP', step: step.stepNumber + 1 });
           const stepReasoning = step.reasoningText ?? '';
 
           if (step.text) {
@@ -201,6 +202,13 @@ export function useAgentStream({
             dispatch({ type: 'FLUSH_TOOL_CALLS' });
           }
 
+          const WARN_THRESHOLD = MAX_TOOL_STEPS - 5;
+          if (step.stepNumber + 1 === WARN_THRESHOLD) {
+            dispatch({
+              type: 'PUSH_STATIC',
+              entry: { type: 'info', content: `⚠ Step ${WARN_THRESHOLD}/${MAX_TOOL_STEPS} — approaching limit. Wrap up soon.` },
+            });
+          }
           if (step.stepNumber + 1 >= MAX_TOOL_STEPS) {
             dispatch({
               type: 'PUSH_STATIC',

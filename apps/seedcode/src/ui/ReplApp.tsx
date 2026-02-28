@@ -58,6 +58,7 @@ const INITIAL_STATE = (initialConfig: Config, initialSkills: SkillEntry[]): AppS
   availableSkills: initialSkills,
   resumeSessions: null,
   memoryPicker: false,
+  currentStep: null,
 });
 
 export function ReplApp({ config: initialConfig, version, seed, onExit, onOpenEditor, skipConfirm = false, initialSkills = [], savedState }: ReplAppProps) {
@@ -313,6 +314,7 @@ export function ReplApp({ config: initialConfig, version, seed, onExit, onOpenEd
     staticTurns, activeTurn, activeReasoning, streaming,
     activeToolCalls, activeTodos, pendingConfirm, pendingQuestion,
     liveConfig, waitingForModel, availableSkills, resumeSessions, memoryPicker,
+    currentStep,
   } = state;
 
   const maskedKey = liveConfig.apiKey
@@ -330,7 +332,7 @@ export function ReplApp({ config: initialConfig, version, seed, onExit, onOpenEd
 
   return (
     <Box flexDirection="column">
-      <StatusBar version={version} model={liveConfig.model} maskedKey={maskedKey} contextPct={contextPct} />
+      <StatusBar version={version} model={liveConfig.model} maskedKey={maskedKey} contextPct={contextPct} currentStep={currentStep} />
 
       <MessageList
         staticTurns={staticTurns}
