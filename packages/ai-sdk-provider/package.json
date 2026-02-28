@@ -4,14 +4,14 @@
   "description": "Seed adapter for AI SDK",
   "license": "MIT",
   "author": "SweetRetry <zimin.zhang2000@gmail.com>",
-  "homepage": "https://github.com/SweetRetry/seed-kit#readme",
+  "homepage": "https://github.com/SweetRetry/seedkit-ai#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/SweetRetry/seed-kit.git",
+    "url": "git+https://github.com/SweetRetry/seedkit-ai.git",
     "directory": "packages/ai-sdk-provider"
   },
   "bugs": {
-    "url": "https://github.com/SweetRetry/seed-kit/issues"
+    "url": "https://github.com/SweetRetry/seedkit-ai/issues"
   },
   "keywords": [
     "ai",
