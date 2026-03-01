@@ -1,6 +1,6 @@
 # seedcode — Development Plan
 
-> **Updated**: 2026-02-28 (Gap analysis added 2026-02-28)
+> **Updated**: 2026-03-01 (Architecture audit 2026-03-01; Gap analysis 2026-02-28)
 > **Goal**: Functional parity with Claude Code's core coding loop, constrained only by model quality.
 > Each phase is a fully usable milestone. Later phases build on earlier ones without breaking them.
 
@@ -175,6 +175,29 @@
 
 ---
 
+## Architecture Audit ✅ (2026-03-01)
+
+**Goal**: Review tool design, system prompt, and sub-agent architecture against Claude Code's published tool design principles.
+
+**Reference**: Claude Code team article on action space design (tool shaping, progressive disclosure, capability-driven evolution).
+
+### Changes
+- [x] Inject environment snapshot (CWD, git branch/status, platform, Node) into system prompt — saves 1-2 tool calls per session
+- [x] Add "Don't use bash for X" rules — prevents model misusing bash over dedicated tools
+- [x] Merge `listDisplays` + `screenshot` into single tool with optional `displayId` — tool count 17→16
+- [x] Rewrite sub-agent system prompt with XML tags, tool selection decision tree, structured output format
+- [x] Structure diagnostics output as separate `diagnostics` field instead of string concatenation
+- [x] Extract shared `buildHunkFromPatch` to `diff-utils.ts` — deduplicate edit.ts + write.ts
+- [x] Remove dead code: `buildContextWithSkill()` — defined but never called
+- [x] Slim system prompt tool inventory to names only — detailed descriptions stay in tool definitions
+
+### Key decisions
+- `loadSkill` stays as tool (not slash command) — enables model-driven progressive disclosure + recursive file discovery
+- Bar to add new tools is high — prefer skills/subagents for extending capabilities
+- Sub-agent prompt uses XML tags (`<persona>`, `<context>`, `<task>`, `<constraints>`, `<format>`) per prompt engineering best practices
+
+---
+
 ## Phase 6 — Reliability & Safety
 
 **Goal**: Graceful error recovery, retry logic, undo capability.
@@ -289,6 +312,8 @@ Phase 4 (polish + publish)          ← distributable package
     ↓
 Phase 5 (output quality)            ← readable, highlighted output
     ↓
+Architecture Audit                  ← tool design review, prompt engineering
+    ↓
 Phase 6 (reliability & safety)      ← retries, undo, permissions
     ↓
 Phase 7 (agent power features)      ← parallel agents, auto memory
@@ -311,9 +336,14 @@ Phase 8 (developer experience)      ← distribution, debug, skills DX
 | Large file truncation warning | Phase 3b ✅ |
 | Session persistence (auto-save) | Phase 3c ✅ |
 | Session list + resume | Phase 3c ✅ |
-| Markdown / syntax highlight rendering | Phase 5 |
-| Colored unified diff display | Phase 5 |
-| Bash output streaming + auto-truncation | Phase 5 |
+| Markdown / syntax highlight rendering | Phase 5 ✅ |
+| Colored unified diff display | Phase 5 ✅ |
+| Bash output streaming + auto-truncation | Phase 5 ✅ |
+| Environment snapshot in system prompt | Audit ✅ |
+| Tool misuse prevention ("Don't" rules) | Audit ✅ |
+| Merge listDisplays + screenshot | Audit ✅ |
+| Sub-agent prompt quality | Audit ✅ |
+| Structured diagnostics output | Audit ✅ |
 | Network retry / error recovery | Phase 6 |
 | File undo / rollback | Phase 6 |
 | Permission tiers (--read-only, --no-bash) | Phase 6 |
