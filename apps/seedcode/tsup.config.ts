@@ -8,6 +8,6 @@ export default defineConfig({
   sourcemap: false,
   minify: false,
   // Bundle workspace packages into the output so no external dist is needed
-  noExternal: ['@seedkit-ai/ai-sdk-provider'],
+  noExternal: ['@seedkit-ai/ai-sdk-provider', '@seedkit-ai/tools'],
   onSuccess: 'chmod +x dist/index.js',
 });

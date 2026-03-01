@@ -375,6 +375,8 @@ export function useAgentStream({
 
     abortControllerRef.current = null;
     saveSession(cwd, context.sessionIdRef.current, messages.current);
+    // Terminal bell — notifies the user when a (potentially long) turn completes
+    process.stdout.write('\x07');
     inFlight.current = false;
   };
 

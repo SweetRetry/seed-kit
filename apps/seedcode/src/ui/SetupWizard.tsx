@@ -52,7 +52,7 @@ export function SetupWizard({ onDone, onCancel }: SetupWizardProps) {
       <Text bold color="cyan">seedcode — First Run Setup</Text>
       <Box marginTop={1}>
         <Text>Enter your VolcEngine ARK API key </Text>
-        <Text dimColor>(saved to ~/.config/seedcode/config.json)</Text>
+        <Text dimColor>(saved to ~/.seedcode/config.json)</Text>
       </Box>
       <Box marginTop={1}>
         <Text color="cyan" bold>› </Text>

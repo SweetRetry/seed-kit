@@ -12,6 +12,7 @@ export const AVAILABLE_MODELS = [
   'doubao-seed-code-preview-251028',
 ] as const;
 
+
 export type SlashCommandResult =
   | { type: 'handled'; output?: string }
   | { type: 'exit' }
@@ -91,6 +92,7 @@ export function handleSlashCommand(
 
     case 'compact':
       return { type: 'compact' };
+
 
     case 'memory':
       return { type: 'memory_picker' };

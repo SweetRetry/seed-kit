@@ -3,7 +3,7 @@ import { tool, ToolLoopAgent, stepCountIs, type LanguageModel } from 'ai';
 import { readFile } from './read.js';
 import { globFiles } from './glob.js';
 import { grepFiles } from './grep.js';
-import { runBash, truncateBashOutput } from './bash.js';
+import { runBashAsync, truncateBashOutput } from './bash.js';
 import { webSearch, webFetch } from '@seedkit-ai/tools';
 import type { TaskStore } from './task.js';
 import type { ToolError } from './index.js';
@@ -77,7 +77,7 @@ Structure your final response as:
  * Excludes edit/write/confirm to avoid nested confirmation flows.
  * Includes taskList/taskGet/taskUpdate for shared task coordination.
  */
-function buildSubAgentTools(cwd: string, taskStore: TaskStore) {
+function buildSubAgentTools(cwd: string, taskStore: TaskStore, abortSignal?: AbortSignal) {
   return {
     read: tool({
       description: 'Read a file (up to 2000 lines by default). Use offset/limit for large files.',
@@ -119,7 +119,7 @@ function buildSubAgentTools(cwd: string, taskStore: TaskStore) {
       inputSchema: z.object({ command: z.string() }),
       execute: async ({ command }) => {
         try {
-          const result = runBash(command, cwd);
+          const result = await runBashAsync(command, cwd, abortSignal);
           return {
             ...result,
             stdout: truncateBashOutput(result.stdout),
@@ -216,7 +216,7 @@ export function buildSpawnAgentTool(opts: {
         const subAgent = new ToolLoopAgent({
           model,
           instructions: SUB_AGENT_SYSTEM_PROMPT,
-          tools: buildSubAgentTools(cwd, taskStore),
+          tools: buildSubAgentTools(cwd, taskStore, abortSignal),
           stopWhen: stepCountIs(MAX_SUBAGENT_STEPS),
         });
 

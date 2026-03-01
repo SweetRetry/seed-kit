@@ -5,11 +5,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { Config } from './config/schema.js';
 import { buildContext, type SkillEntry } from './context/index.js';
+import { loadSession } from './sessions/index.js';
 import { ReplApp, type SavedReplState } from './ui/ReplApp.js';
 import { SetupWizard } from './ui/SetupWizard.js';
 
 interface ReplOptions {
   skipConfirm?: boolean;
+  resumeSessionId?: string;
 }
 
 function App({
@@ -64,6 +66,21 @@ export async function startRepl(
   const cwd = process.cwd();
   const { skills: initialSkills } = buildContext(cwd);
 
+  // Build initial savedState from --resume if provided
+  let initialSavedState: SavedReplState | undefined;
+  if (opts.resumeSessionId) {
+    const msgs = loadSession(cwd, opts.resumeSessionId);
+    if (msgs.length > 0) {
+      initialSavedState = {
+        messages: msgs,
+        sessionId: opts.resumeSessionId,
+        turnCount: msgs.filter((m) => m.role === 'user').length,
+        staticTurns: [],  // ReplApp.handleResumeSelect will rebuild these
+        totalTokens: 0,
+      };
+    }
+  }
+
   type PendingEditor = { filePath: string; saved: SavedReplState } | null;
   let pendingEditor: PendingEditor = null;
 
@@ -91,7 +108,7 @@ export async function startRepl(
     });
 
   // Loop: re-mount after returning from editor
-  let restoreState: SavedReplState | undefined;
+  let restoreState: SavedReplState | undefined = initialSavedState;
   while (true) {
     await mount(restoreState);
 

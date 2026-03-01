@@ -3,6 +3,7 @@ import { Command } from 'commander';
 import { loadConfig } from './config/index.js';
 import { PLANS, type Plan } from './config/schema.js';
 import { startRepl } from './repl.js';
+import { resolveSessionId, listSessions, loadSession } from './sessions/index.js';
 
 const VERSION = '0.0.1';
 
@@ -14,6 +15,7 @@ const program = new Command()
   .option('-k, --api-key <key>', 'API key (overrides ARK_API_KEY env var)')
   .option('--thinking', 'Enable extended thinking mode')
   .option('--plan <plan>', 'API plan: api (default) or coding', 'api')
+  .option('-r, --resume [session-id]', 'Resume a previous session (by ID prefix or most recent)')
   .option(
     '--dangerously-skip-permissions',
     'Skip all tool confirmation prompts (CI use only, blocked when stdin is TTY)'
@@ -39,6 +41,7 @@ async function main(): Promise<void> {
     apiKey?: string;
     thinking?: boolean;
     plan?: string;
+    resume?: string | true;
     dangerouslySkipPermissions?: boolean;
   }>();
 
@@ -64,8 +67,33 @@ async function main(): Promise<void> {
     plan,
   });
 
+  // --resume: resolve session ID and load messages
+  let resumeSessionId: string | undefined;
+  if (opts.resume !== undefined) {
+    const cwd = process.cwd();
+    if (opts.resume === true) {
+      // --resume with no value: pick the most recent session
+      const sessions = listSessions(cwd);
+      if (sessions.length === 0) {
+        process.stderr.write('No saved sessions for this directory.\n');
+        process.exit(1);
+      }
+      resumeSessionId = sessions[0].sessionId;
+    } else {
+      // --resume <prefix>: resolve by prefix
+      const resolved = resolveSessionId(cwd, opts.resume);
+      if (!resolved) {
+        process.stderr.write(`No session found matching: ${opts.resume}\n`);
+        process.exit(1);
+      }
+      resumeSessionId = resolved;
+    }
+    process.stderr.write(`Resuming session ${resumeSessionId.slice(0, 8)}…\n`);
+  }
+
   await startRepl(config, VERSION, {
     skipConfirm: opts.dangerouslySkipPermissions ?? false,
+    resumeSessionId,
   });
 }
 

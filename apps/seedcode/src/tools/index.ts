@@ -10,7 +10,6 @@ import { webSearch, webFetch } from '@seedkit-ai/tools';
 import { captureScreenshot, getDisplayList } from './screenshot.js';
 import { createTaskStore } from './task.js';
 import { loadSkillBody, type SkillEntry } from '../context/skills.js';
-import { runDiagnostics, formatDiagnostics } from './diagnostics.js';
 import { buildSpawnAgentTool, type SpawnAgentProgressInfo } from './spawn-agent.js';
 
 export type ToolName = 'read' | 'edit' | 'write' | 'glob' | 'grep' | 'bash' | 'webSearch' | 'webFetch' | 'screenshot' | 'taskCreate' | 'taskUpdate' | 'taskGet' | 'taskList' | 'askQuestion' | 'loadSkill' | 'spawnAgent';
@@ -136,7 +135,7 @@ export function buildTools(opts: {
         old_string: z.string().describe('Exact text to find — must appear exactly once in the file'),
         new_string: z.string().describe('Text to replace it with'),
       }),
-      execute: async ({ path: filePath, old_string, new_string }): Promise<{ success: true; message: string; diagnostics?: string } | ToolError> => {
+      execute: async ({ path: filePath, old_string, new_string }): Promise<{ success: true; message: string } | ToolError> => {
         try {
           const diff = computeEditDiff(filePath, old_string, new_string);
           if ('error' in diff) return diff;
@@ -148,8 +147,7 @@ export function buildTools(opts: {
 
           const result = applyEdit(filePath, old_string, new_string);
           if ('error' in result) return result;
-          const diagOutput = formatDiagnostics(runDiagnostics(filePath, cwd));
-          return { success: true, message: result.message, ...(diagOutput ? { diagnostics: diagOutput } : {}) };
+          return { success: true, message: result.message };
         } catch (err) {
           return { error: err instanceof Error ? err.message : String(err) };
         }
@@ -163,7 +161,7 @@ export function buildTools(opts: {
         path: z.string().describe('Path to the file to write'),
         content: z.string().describe('Content to write to the file'),
       }),
-      execute: async ({ path: filePath, content }): Promise<{ success: true; message: string; diagnostics?: string } | ToolError> => {
+      execute: async ({ path: filePath, content }): Promise<{ success: true; message: string } | ToolError> => {
         try {
           const diff = computeDiff(filePath, content);
           const description =
@@ -177,12 +175,11 @@ export function buildTools(opts: {
           }
 
           writeFile(filePath, content);
-          const baseMsg =
+          const msg =
             diff.oldContent === null
               ? `Created ${filePath} (${diff.added} lines)`
               : `Updated ${filePath} (+${diff.added} / -${diff.removed})`;
-          const diagOutput = formatDiagnostics(runDiagnostics(filePath, cwd));
-          return { success: true, message: baseMsg, ...(diagOutput ? { diagnostics: diagOutput } : {}) };
+          return { success: true, message: msg };
         } catch (err) {
           return { error: err instanceof Error ? err.message : String(err) };
         }
