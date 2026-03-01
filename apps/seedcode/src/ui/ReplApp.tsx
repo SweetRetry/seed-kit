@@ -273,6 +273,8 @@ export function ReplApp({ config: initialConfig, version, apiKey, onExit, onOpen
   const handleInterrupt = useCallback(() => {
     if (stream.inFlight.current) {
       stream.abortRef.current = true;
+      // Cancel the HTTP request and all sub-agent streams
+      stream.abortControllerRef.current?.abort();
       const { pendingConfirm, pendingQuestion } = stateRef.current;
       if (pendingConfirm) {
         pendingConfirm.resolve(false);

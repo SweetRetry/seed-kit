@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process';
+import { execSync, spawn } from 'node:child_process';
 
 const DENYLIST_PATTERNS = [
   /rm\s+-rf\s+\/(?:\s|$)/,
@@ -39,15 +39,18 @@ export interface BashResult {
   exitCode: number;
 }
 
-export function runBash(command: string, cwd?: string): BashResult {
-  const baseCwd = cwd ?? process.cwd();
-
-  // Denylist check — catastrophic-only patterns
+function checkDenylist(command: string): void {
   for (const pattern of DENYLIST_PATTERNS) {
     if (pattern.test(command)) {
       throw new Error(`Command blocked by security policy: ${command}`);
     }
   }
+}
+
+/** Synchronous bash — used by sub-agents where abort is handled at the agent level. */
+export function runBash(command: string, cwd?: string): BashResult {
+  const baseCwd = cwd ?? process.cwd();
+  checkDenylist(command);
 
   try {
     const stdout = execSync(command, {
@@ -65,4 +68,78 @@ export function runBash(command: string, cwd?: string): BashResult {
       exitCode: e.status ?? 1,
     };
   }
+}
+
+const TIMEOUT_MS = 30_000;
+const MAX_BUFFER = 10 * 1024 * 1024; // 10 MB
+
+/**
+ * Async bash with AbortSignal support.
+ * Kills the child process tree when the signal fires.
+ */
+export function runBashAsync(command: string, cwd?: string, signal?: AbortSignal): Promise<BashResult> {
+  const baseCwd = cwd ?? process.cwd();
+  checkDenylist(command);
+
+  if (signal?.aborted) {
+    return Promise.resolve({ stdout: '', stderr: 'Aborted', exitCode: 130 });
+  }
+
+  return new Promise<BashResult>((resolve) => {
+    const child = spawn('sh', ['-c', command], {
+      cwd: baseCwd,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    let stdout = '';
+    let stderr = '';
+    let stdoutLen = 0;
+    let stderrLen = 0;
+    let killed = false;
+
+    const cleanup = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+    };
+
+    const onAbort = () => {
+      if (!killed) {
+        killed = true;
+        child.kill('SIGTERM');
+      }
+    };
+
+    signal?.addEventListener('abort', onAbort, { once: true });
+
+    const timer = setTimeout(() => {
+      if (!killed) {
+        killed = true;
+        child.kill('SIGTERM');
+      }
+    }, TIMEOUT_MS);
+
+    child.stdout!.on('data', (chunk: Buffer) => {
+      stdoutLen += chunk.length;
+      if (stdoutLen <= MAX_BUFFER) stdout += chunk.toString('utf-8');
+    });
+
+    child.stderr!.on('data', (chunk: Buffer) => {
+      stderrLen += chunk.length;
+      if (stderrLen <= MAX_BUFFER) stderr += chunk.toString('utf-8');
+    });
+
+    child.on('close', (code) => {
+      cleanup();
+      resolve({
+        stdout,
+        stderr: killed && signal?.aborted ? stderr || 'Aborted' : stderr,
+        exitCode: code ?? (killed ? 130 : 1),
+      });
+    });
+
+    child.on('error', (err) => {
+      cleanup();
+      resolve({ stdout: '', stderr: err.message, exitCode: 1 });
+    });
+  });
 }

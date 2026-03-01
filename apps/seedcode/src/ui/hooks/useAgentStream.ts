@@ -6,6 +6,7 @@ import type { Config } from '../../config/schema.js';
 import { buildTools, isToolError, createTaskStore, type ConfirmFn, type AskQuestionFn } from '../../tools/index.js';
 import { allMediaIds, getMedia, deleteMedia } from '../../media-store.js';
 import { saveSession } from '../../sessions/index.js';
+import { withRetry, classifyError } from '../../utils/retry.js';
 import type { ToolCallEntry } from '../ToolCallView.js';
 import type { Action, TurnEntry } from '../replReducer.js';
 import type { AgentContext } from './useAgentContext.js';
@@ -41,6 +42,7 @@ export interface AgentStream {
   turnCount: React.MutableRefObject<number>;
   inFlight: React.MutableRefObject<boolean>;
   abortRef: React.MutableRefObject<boolean>;
+  abortControllerRef: React.MutableRefObject<AbortController | null>;
   taskStore: React.MutableRefObject<ReturnType<typeof createTaskStore>>;
   runStream: (cfg: Config) => Promise<void>;
   runCompact: (cfg: Config) => Promise<void>;
@@ -88,6 +90,7 @@ export function useAgentStream({
   const turnCount = useRef(0);
   const inFlight = useRef(false);
   const abortRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const taskStore = useRef(createTaskStore(cwd, context.sessionIdRef.current));
 
   const runStream = async (cfg: Config) => {
@@ -126,7 +129,9 @@ export function useAgentStream({
         : header;
       dispatch({ type: 'UPDATE_TOOL_CALL_PROGRESS', toolName: 'spawnAgent', progress: progressText });
     };
-    const tools = buildTools({ cwd, confirm, askQuestion, skipConfirm, taskStore: taskStore.current, availableSkills: context.availableSkillsRef.current, model, onTaskChange, onSpawnAgentProgress });
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+    const tools = buildTools({ cwd, confirm, askQuestion, skipConfirm, taskStore: taskStore.current, availableSkills: context.availableSkillsRef.current, model, onTaskChange, onSpawnAgentProgress, abortSignal: abortController.signal });
 
     const scheduleFlush = (text: string, done: boolean) => {
       accumulated = text;
@@ -184,102 +189,129 @@ export function useAgentStream({
     let streamResult: ReturnType<typeof streamText<ToolsMap>> | null = null;
 
     try {
-      streamResult = streamText({
-        model,
-        system: context.getEffectiveSystemPrompt(),
-        messages: messages.current,
-        tools,
-        stopWhen: stepCountIs(MAX_TOOL_STEPS),
-        ...(cfg.thinking ? { providerOptions: { seed: { thinking: true } } } : {}),
-        onStepFinish: (step) => {
-          dispatch({ type: 'SET_STEP', step: step.stepNumber + 1 });
+      await withRetry(async () => {
+        // Reset streaming state for each attempt (retries start fresh)
+        accumulated = '';
+        accReasoning = '';
+        lastStepText = '';
+        lastStepReasoning = '';
 
-          if (step.text) {
-            if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
-            if (reasoningFlushTimer) { clearTimeout(reasoningFlushTimer); reasoningFlushTimer = null; }
+        streamResult = streamText({
+          model,
+          system: context.getEffectiveSystemPrompt(),
+          messages: messages.current,
+          tools,
+          abortSignal: abortController.signal,
+          stopWhen: stepCountIs(MAX_TOOL_STEPS),
+          ...(cfg.thinking ? { providerOptions: { seed: { thinking: true } } } : {}),
+          onStepFinish: (step) => {
+            dispatch({ type: 'SET_STEP', step: step.stepNumber + 1 });
 
-            // Don't push assistant text during the tool loop — save it.
-            // Only the final step's text will be rendered when the stream ends.
-            lastStepText = step.text;
-            lastStepReasoning = step.reasoningText ?? '';
-            accumulated = '';
-            dispatch({ type: 'STEP_FINISH' });
-          }
+            if (step.text) {
+              if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+              if (reasoningFlushTimer) { clearTimeout(reasoningFlushTimer); reasoningFlushTimer = null; }
 
-          if (step.toolCalls && step.toolCalls.length > 0) {
-            for (const tc of step.toolCalls) {
-              const tr = step.toolResults?.find((r) => r.toolCallId === tc.toolCallId);
-              const isError = isToolError(tr?.output);
-              let doneOutput: string | undefined;
-              if (!isError && tc.toolName === 'bash' && tr?.output) {
-                const out = tr.output as { stdout?: string; stderr?: string };
-                const combined = [out.stdout, out.stderr].filter(Boolean).join('\n').trim();
-                doneOutput = combined || undefined;
-              }
-              const entry: ToolCallEntry = {
-                id: tc.toolCallId,
-                toolName: tc.toolName as import('../../tools/index.js').ToolName,
-                description: buildToolDescription(tc.toolName, tc.input as Record<string, unknown>),
-                status: isError ? 'error' : 'done',
-                output: isError ? (tr?.output as import('../../tools/index.js').ToolError).error : doneOutput,
-              };
-              dispatch({ type: 'PUSH_STATIC', entry: { type: 'toolcall', entry } });
+              // Don't push assistant text during the tool loop — save it.
+              // Only the final step's text will be rendered when the stream ends.
+              lastStepText = step.text;
+              lastStepReasoning = step.reasoningText ?? '';
+              accumulated = '';
+              dispatch({ type: 'STEP_FINISH' });
             }
-            dispatch({ type: 'FLUSH_TOOL_CALLS' });
-          }
 
-          const WARN_THRESHOLD = MAX_TOOL_STEPS - 5;
-          if (step.stepNumber + 1 === WARN_THRESHOLD) {
+            if (step.toolCalls && step.toolCalls.length > 0) {
+              for (const tc of step.toolCalls) {
+                const tr = step.toolResults?.find((r) => r.toolCallId === tc.toolCallId);
+                const isError = isToolError(tr?.output);
+                let doneOutput: string | undefined;
+                if (!isError && tc.toolName === 'bash' && tr?.output) {
+                  const out = tr.output as { stdout?: string; stderr?: string };
+                  const combined = [out.stdout, out.stderr].filter(Boolean).join('\n').trim();
+                  doneOutput = combined || undefined;
+                }
+                const entry: ToolCallEntry = {
+                  id: tc.toolCallId,
+                  toolName: tc.toolName as import('../../tools/index.js').ToolName,
+                  description: buildToolDescription(tc.toolName, tc.input as Record<string, unknown>),
+                  status: isError ? 'error' : 'done',
+                  output: isError ? (tr?.output as import('../../tools/index.js').ToolError).error : doneOutput,
+                };
+                dispatch({ type: 'PUSH_STATIC', entry: { type: 'toolcall', entry } });
+              }
+              dispatch({ type: 'FLUSH_TOOL_CALLS' });
+            }
+
+            const WARN_THRESHOLD = MAX_TOOL_STEPS - 5;
+            if (step.stepNumber + 1 === WARN_THRESHOLD) {
+              dispatch({
+                type: 'PUSH_STATIC',
+                entry: { type: 'info', content: `⚠ Step ${WARN_THRESHOLD}/${MAX_TOOL_STEPS} — approaching limit. Wrap up soon.` },
+              });
+            }
+            if (step.stepNumber + 1 >= MAX_TOOL_STEPS) {
+              dispatch({
+                type: 'PUSH_STATIC',
+                entry: { type: 'error', content: `Hard limit reached: ${MAX_TOOL_STEPS} tool steps in one turn. Stopping.` },
+              });
+              abortRef.current = true;
+            }
+          },
+          onFinish: (result) => {
+            if (result.usage) {
+              dispatch({ type: 'ADD_TOKENS', count: result.usage.totalTokens ?? 0 });
+            }
+          },
+        });
+
+        for await (const part of streamResult!.fullStream) {
+          if (abortRef.current) break;
+          if (part.type === 'reasoning-delta') {
+            scheduleReasoningFlush(accReasoning + part.text);
+          } else if (part.type === 'text-delta') {
+            scheduleFlush(accumulated + part.text, false);
+          } else if (part.type === 'tool-input-start') {
+            // Tool call starting — discard any intermediate assistant text (e.g. "Let me search…").
+            // This text will also appear in onStepFinish where we intentionally skip it for tool steps.
+            if (accumulated) {
+              if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+              if (reasoningFlushTimer) { clearTimeout(reasoningFlushTimer); reasoningFlushTimer = null; }
+              accumulated = '';
+              accReasoning = '';
+              dispatch({ type: 'STEP_FINISH' });
+            }
             dispatch({
-              type: 'PUSH_STATIC',
-              entry: { type: 'info', content: `⚠ Step ${WARN_THRESHOLD}/${MAX_TOOL_STEPS} — approaching limit. Wrap up soon.` },
+              type: 'PUSH_ACTIVE_TOOL_CALL',
+              entry: {
+                id: part.id,
+                toolName: part.toolName as import('../../tools/index.js').ToolName,
+                description: part.toolName,
+                status: 'running',
+              },
             });
           }
-          if (step.stepNumber + 1 >= MAX_TOOL_STEPS) {
-            dispatch({
-              type: 'PUSH_STATIC',
-              entry: { type: 'error', content: `Hard limit reached: ${MAX_TOOL_STEPS} tool steps in one turn. Stopping.` },
-            });
-            abortRef.current = true;
-          }
-        },
-        onFinish: (result) => {
-          if (result.usage) {
-            dispatch({ type: 'ADD_TOKENS', count: result.usage.totalTokens ?? 0 });
-          }
-        },
-      });
-
-      for await (const part of streamResult!.fullStream) {
-        if (abortRef.current) break;
-        if (part.type === 'reasoning-delta') {
-          scheduleReasoningFlush(accReasoning + part.text);
-        } else if (part.type === 'text-delta') {
-          scheduleFlush(accumulated + part.text, false);
-        } else if (part.type === 'tool-input-start') {
-          // Tool call starting — discard any intermediate assistant text (e.g. "Let me search…").
-          // This text will also appear in onStepFinish where we intentionally skip it for tool steps.
-          if (accumulated) {
-            if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
-            if (reasoningFlushTimer) { clearTimeout(reasoningFlushTimer); reasoningFlushTimer = null; }
-            accumulated = '';
-            accReasoning = '';
-            dispatch({ type: 'STEP_FINISH' });
-          }
-          dispatch({
-            type: 'PUSH_ACTIVE_TOOL_CALL',
-            entry: {
-              id: part.id,
-              toolName: part.toolName as import('../../tools/index.js').ToolName,
-              description: part.toolName,
-              status: 'running',
-            },
-          });
         }
-      }
+      },
+      // onRetry: surface retry info to user
+      (attempt, delayMs, err) => {
+        const cls = classifyError(err);
+        const label = cls === 'rate_limit' ? 'Rate limited' : 'Network error';
+        dispatch({
+          type: 'PUSH_STATIC',
+          entry: { type: 'info', content: `⚠ ${label} — retrying in ${(delayMs / 1000).toFixed(1)}s (attempt ${attempt}/3)...` },
+        });
+      },
+      abortController.signal);
     } catch (err) {
       if (flushTimer) clearTimeout(flushTimer);
       if (reasoningFlushTimer) clearTimeout(reasoningFlushTimer);
+
+      // Abort: user pressed Ctrl+C — not an error, just clean up silently.
+      if (err instanceof Error && err.name === 'AbortError') {
+        messages.current.pop();
+        dispatch({ type: 'STREAM_END' });
+        inFlight.current = false;
+        return;
+      }
 
       // NoOutputGeneratedError: API returned empty response (no text, no tool calls).
       // This is recoverable — show a friendly message and let the user retry.
@@ -291,14 +323,14 @@ export function useAgentStream({
       }
 
       messages.current.pop();
+      const cls = classifyError(err);
       const msg = err instanceof Error ? err.message : String(err);
-      const isAuthError = msg.includes('401') || msg.toLowerCase().includes('invalid api key');
 
       let content: string;
-      if (isAuthError) {
+      if (cls === 'auth') {
         content = 'Invalid API key. Set ARK_API_KEY or reconfigure with /model.';
-      } else if (msg.includes('network') || msg.includes('ECONNREFUSED')) {
-        content = `Network error: ${msg}\n(Check your connection and try again.)`;
+      } else if (cls === 'network' || cls === 'rate_limit') {
+        content = `Network error: ${msg}\n(Retries exhausted. Check your connection and try again.)`;
       } else {
         content = `Error: ${msg}`;
       }
@@ -341,6 +373,7 @@ export function useAgentStream({
       }
     }
 
+    abortControllerRef.current = null;
     saveSession(cwd, context.sessionIdRef.current, messages.current);
     inFlight.current = false;
   };
@@ -396,5 +429,5 @@ export function useAgentStream({
     dispatch({ type: 'STREAM_END' });
   };
 
-  return { messages, turnCount, inFlight, abortRef, taskStore, runStream, runCompact };
+  return { messages, turnCount, inFlight, abortRef, abortControllerRef, taskStore, runStream, runCompact };
 }

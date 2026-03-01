@@ -5,7 +5,7 @@ import { computeDiff, writeFile } from './write.js';
 import { computeEditDiff, applyEdit } from './edit.js';
 import { globFiles } from './glob.js';
 import { grepFiles } from './grep.js';
-import { runBash, truncateBashOutput } from './bash.js';
+import { runBashAsync, truncateBashOutput } from './bash.js';
 import { webSearch, webFetch } from '@seedkit-ai/tools';
 import { captureScreenshot, getDisplayList } from './screenshot.js';
 import { createTaskStore } from './task.js';
@@ -69,8 +69,9 @@ export function buildTools(opts: {
   model: LanguageModel;
   onTaskChange?: TaskChangeFn;
   onSpawnAgentProgress?: (info: SpawnAgentProgressInfo) => void;
+  abortSignal?: AbortSignal;
 }) {
-  const { cwd, confirm, askQuestion, skipConfirm, taskStore, availableSkills, model, onTaskChange, onSpawnAgentProgress } = opts;
+  const { cwd, confirm, askQuestion, skipConfirm, taskStore, availableSkills, model, onTaskChange, onSpawnAgentProgress, abortSignal } = opts;
 
   const requestConfirm = (
     toolName: ToolName,
@@ -232,7 +233,7 @@ export function buildTools(opts: {
           if (!approved) {
             return { error: 'User denied bash execution.' };
           }
-          const result = runBash(command, cwd);
+          const result = await runBashAsync(command, cwd, abortSignal);
           return {
             ...result,
             stdout: truncateBashOutput(result.stdout),
@@ -361,7 +362,7 @@ export function buildTools(opts: {
     taskUpdate: wrapTaskTool(taskStore.taskUpdate),
     taskGet: taskStore.taskGet,
     taskList: taskStore.taskList,
-    spawnAgent: buildSpawnAgentTool({ model, cwd, taskStore, onProgress: onSpawnAgentProgress }),
+    spawnAgent: buildSpawnAgentTool({ model, cwd, taskStore, onProgress: onSpawnAgentProgress, abortSignal }),
   };
 }
 

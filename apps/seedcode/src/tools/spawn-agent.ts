@@ -196,8 +196,9 @@ export function buildSpawnAgentTool(opts: {
   cwd: string;
   taskStore: TaskStore;
   onProgress?: (info: SpawnAgentProgressInfo) => void;
+  abortSignal?: AbortSignal;
 }) {
-  const { model, cwd, taskStore, onProgress } = opts;
+  const { model, cwd, taskStore, onProgress, abortSignal } = opts;
 
   return tool({
     description:
@@ -225,6 +226,7 @@ export function buildSpawnAgentTool(opts: {
 
         const result = await subAgent.generate({
           prompt,
+          abortSignal,
           onStepFinish: (step) => {
             const summaries = (step.toolCalls ?? []).map((tc) => {
               const input = tc.input as Record<string, unknown> | undefined;

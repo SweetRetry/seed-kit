@@ -58,5 +58,8 @@ export function writeFile(filePath: string, content: string): void {
   const abs = path.resolve(filePath);
   const dir = path.dirname(abs);
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(abs, content, 'utf-8');
+  // Atomic write: temp file + rename prevents corruption if killed mid-write
+  const tmp = abs + `.tmp.${process.pid}`;
+  fs.writeFileSync(tmp, content, 'utf-8');
+  fs.renameSync(tmp, abs);
 }

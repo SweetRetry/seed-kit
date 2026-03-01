@@ -77,7 +77,10 @@ export function applyEdit(filePath: string, oldString: string, newString: string
   }
 
   const newContent = content.replace(oldString, newString);
-  fs.writeFileSync(abs, newContent, 'utf-8');
+  // Atomic write: temp file + rename prevents corruption if killed mid-write
+  const tmp = abs + `.tmp.${process.pid}`;
+  fs.writeFileSync(tmp, newContent, 'utf-8');
+  fs.renameSync(tmp, abs);
 
   const removed = oldString.split('\n').length;
   const added = newString.split('\n').length;

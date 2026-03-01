@@ -1,6 +1,6 @@
 # seedcode — Development Plan
 
-> **Updated**: 2026-03-01 (Architecture audit 2026-03-01; Gap analysis 2026-02-28)
+> **Updated**: 2026-03-01 (Phase 6/7 value audit 2026-03-01; Architecture audit 2026-03-01; Gap analysis 2026-02-28)
 > **Goal**: Functional parity with Claude Code's core coding loop, constrained only by model quality.
 > Each phase is a fully usable milestone. Later phases build on earlier ones without breaking them.
 
@@ -198,74 +198,59 @@
 
 ---
 
-## Phase 6 — Reliability & Safety
+## Phase 6 — Hardening ✅ ← (was Phase 6 + 7, consolidated after value audit)
 
-**Goal**: Graceful error recovery, retry logic, undo capability.
+**Goal**: Fix real bugs and add the only reliability primitives that have clear ROI.
 
-**Deliverable**: Network retries, tool-level undo, permission tiers.
+**Deliverable**: Abort signal propagation, network retry, atomic file writes.
 
-### Tasks
-
-#### Error Recovery
-- [ ] `utils/retry.ts` — exponential backoff retry wrapper (3 attempts, 1s/2s/4s, jitter); used by `useAgentStream` on 429/503
-- [ ] Distinguish error types in `useAgentStream`: network error (retry) vs API error (show + stop) vs tool error (continue loop)
-- [ ] Show error details in `MessageList`: red error badge + message; allow user to retry with same input via `r` key
-
-#### File Undo / Rollback
-- [ ] `tools/write.ts` + `tools/edit.ts` — before writing, save original content to `~/.seedcode/undo/{sessionId}/{timestamp}-{slug}.bak`
-- [ ] `/undo` slash command — list last N file changes in session; confirm restore
-- [ ] Undo store: in-memory ring buffer (last 20 file changes); cleared on `/clear`
-
-#### Permission Tiers
-- [ ] `--read-only` CLI flag — disable write/edit/bash tools; useful for exploratory sessions
-- [ ] `--no-bash` CLI flag — disable bash only (allow file edits)
-- [ ] Permission level shown in `/status` and StatusBar
-- [ ] `dangerouslySkipPermissions` already exists — document in `/help`
-
-### Key decisions
-- Bak files are soft-deleted on session end (user can opt to keep with `--keep-undo`)
-- Permission flags are session-scoped, not persisted to config
-
----
-
-## Phase 7 — Agent Power Features
-
-**Goal**: Match Claude Code's advanced agentic capabilities.
-
-**Deliverable**: Parallel agents with UI, auto memory writes, file watching.
+> **Value audit (2026-03-01)**: Original Phase 6 (Reliability & Safety) and Phase 7 (Agent Power Features)
+> were reviewed against actual usage patterns. Most planned items had low ROI:
+>
+> | Dropped | Reason |
+> |---------|--------|
+> | File undo / `.bak` rollback | git is a better undo mechanism; Claude Code doesn't have undo either |
+> | `/undo` slash command | Same — git checkout / git diff covers this |
+> | `--read-only` / `--no-bash` flags | Extremely narrow use case; `--dangerously-skip-permissions` already covers CI |
+> | `r` key retry in MessageList | User can press ↑ + Enter; marginal UX gain |
+> | Parallel agent progress UI | Sub-agents rarely run in parallel; current progress lines are adequate |
+> | `memoryWrite` dedicated tool | Current prompt-instruction + edit/write approach works; usage frequency is low |
+> | `memoryRead` tool | Memory is already injected into system prompt on every turn |
+> | Smart structured compaction | Current naive `/compact` + 70% auto-trigger is adequate |
+> | `/compact --aggressive` | No user demand |
+> | Interrupt confirmation dialog | Ctrl+C should be instant; adding a y/n prompt makes it slower |
+> | Interrupted session resume | Edge case; partial messages are hard to resume cleanly |
 
 ### Tasks
 
-#### Parallel Agent Visibility
-- [ ] `ui/AgentProgressView.tsx` — show N concurrent spawnAgent tasks with status (running/done/error), spinner per agent, truncated description
-- [ ] `tools/spawn-agent.ts` — emit progress events back to parent via callback; `AgentProgressView` subscribes
-- [ ] Wire into `ReplApp.tsx` below `ActiveToolCallsView`
+#### P1: Abort Signal Propagation (bug fix)
+- [x] Pass `AbortController.signal` to `streamText()` so Ctrl+C cancels the HTTP request
+- [x] Pass `AbortSignal` into `ToolLoopAgent.generate()` for sub-agents so parent interrupt kills child streams
+- [x] `bash.ts`: added `runBashAsync` using `spawn` + kill on abort signal; main bash tool uses async version, sub-agents keep sync `runBash` (abort handled at agent level)
 
-#### Auto Memory Writes
-- [ ] `tools/memory.ts` — `memoryWrite` tool: appends/updates a section in `~/.seedcode/projects/{cwd-slug}/memory/MEMORY.md`; model calls this proactively
-- [ ] Register `memoryWrite` in `tools/index.ts` (no confirmation needed — low blast radius)
-- [ ] System prompt instruction: "call memoryWrite when you learn stable project facts (conventions, architecture decisions, env vars)"
-- [ ] `memoryRead` tool (alias for reading the memory file) for agent to check current memory
+#### P2: Network Retry
+- [x] `utils/retry.ts` — `withRetry()` exponential backoff (3 attempts, 1s/2s/4s, ±25% jitter); `classifyError()` categorizes errors
+- [x] Wire into `useAgentStream`: auto-retry on 429/503; surface retry attempt + delay in UI as info banner
+- [x] Distinguish error types: `auth` (stop) vs `rate_limit`/`network` (retry) vs `unknown` (stop)
 
-#### Smart Context Compaction
-- [ ] Auto-compact trigger at 85% context usage (already fires, but uses naive summary)
-- [ ] `context/compact.ts` — structured compaction: separate tool call history from conversation text; compress tool results first; keep last 3 full turns verbatim
-- [ ] `/compact --aggressive` flag — max compression (drops all tool results)
-
-#### Interrupt & Resume Mid-Task
-- [ ] Ctrl+C during streaming → ask "interrupt task? [y/n]" before killing stream (currently kills immediately)
-- [ ] On interrupt: save partial messages to session file with `interrupted: true` marker
-- [ ] `/resume` detects interrupted session and shows warning
+#### P3: Atomic File Writes
+- [x] `tools/write.ts` + `tools/edit.ts` — write to `.tmp.{pid}` then `fs.renameSync` to target path
 
 ### Key decisions
-- `memoryWrite` is a first-class tool (not a slash command) so the model can call it autonomously
-- Parallel agent progress is display-only; actual execution already works
+- File undo deliberately omitted — git is the safety net; adding `.bak` files creates cleanup burden with near-zero value
+- Permission tiers deferred until real user demand surfaces
+- Parallel agent UI deferred — current `agentProgressLines` is adequate for the single-agent-at-a-time common case
+- memoryWrite deferred — prompt-based approach works, dedicated tool adds complexity without proportional benefit
+- `runBashAsync` (spawn-based) for main agent; `runBash` (execSync) kept for sub-agents — sub-agent abort is handled at `ToolLoopAgent.generate()` level, no need for per-command signal
+- `AbortError` from `streamText` caught silently (not shown as error) — user already sees the Ctrl+C effect
+- Retry wraps the entire `streamText` + stream iteration block — if a transient error occurs mid-stream, the full attempt is retried from scratch
+- Atomic write uses `.tmp.{pid}` suffix — PID ensures no collision between concurrent processes
 
 ---
 
-## Phase 8 — Developer Experience
+## Phase 7 — Distribution & DX ← (was Phase 8, promoted after Phase 6/7 consolidation)
 
-**Goal**: Make seedcode easy to install, configure, extend, and debug.
+**Goal**: Make seedcode easy to install, configure, extend, and debug. Publishable package.
 
 **Deliverable**: One-command install, diagnostic mode, skills authoring guide.
 
@@ -273,10 +258,10 @@
 
 #### Distribution
 - [ ] `README.md` — hero section, `npx seedcode` quickstart, AGENTS.md example, skill authoring guide
-- [ ] npm publish: `publishConfig.access=public`, `files: ["dist"]`, `bin.seedcode`
+- [ ] npm publish config: `publishConfig.access=public`, `files: ["dist"]`, `bin.seedcode`
+- [ ] Verify `npx seedcode` works from a clean environment
 - [ ] `turbo.json` — add `seedcode#build` and `seedcode#typecheck` tasks
 - [ ] GitHub Actions: `ci.yml` — typecheck + build on PR; publish on tag `seedcode@*`
-- [ ] `npx seedcode --version` works from clean environment
 
 #### Diagnostics & Debugging
 - [ ] `--debug` CLI flag — log raw API requests/responses to `~/.seedcode/debug/{date}.log`
@@ -295,6 +280,18 @@
 
 ---
 
+## Backlog — On-Demand Features
+
+> Items moved from original Phase 6/7. Pull into a sprint only when real user demand surfaces.
+
+- [ ] `memoryWrite` dedicated tool — if prompt-based memory writes prove unreliable
+- [ ] Parallel agent progress UI (`AgentProgressView.tsx`) — if multi-agent workflows become common
+- [ ] Smart structured compaction (`context/compact.ts`) — if naive summary proves inadequate for long sessions
+- [ ] `--read-only` / `--no-bash` permission tiers — if requested by users
+- [ ] Interrupted session resume — if partial session recovery becomes a real need
+
+---
+
 ## Dependency Map
 
 ```
@@ -308,17 +305,15 @@ Phase 3b (UX parity)                ← everyday interaction quality
     ↓
 Phase 3c (session management)       ← persist + resume conversations
     ↓
-Phase 4 (polish + publish)          ← distributable package
+Phase 4 (polish + publish)          ← distributable package (TODO)
     ↓
 Phase 5 (output quality)            ← readable, highlighted output
     ↓
 Architecture Audit                  ← tool design review, prompt engineering
     ↓
-Phase 6 (reliability & safety)      ← retries, undo, permissions
+Phase 6 (hardening)                 ← abort fix, retry, atomic writes
     ↓
-Phase 7 (agent power features)      ← parallel agents, auto memory
-    ↓
-Phase 8 (developer experience)      ← distribution, debug, skills DX
+Phase 7 (distribution & DX)         ← npm publish, debug, skills DX
 ```
 
 ## Gap Tracker (vs Claude Code)
@@ -344,14 +339,10 @@ Phase 8 (developer experience)      ← distribution, debug, skills DX
 | Merge listDisplays + screenshot | Audit ✅ |
 | Sub-agent prompt quality | Audit ✅ |
 | Structured diagnostics output | Audit ✅ |
-| Network retry / error recovery | Phase 6 |
-| File undo / rollback | Phase 6 |
-| Permission tiers (--read-only, --no-bash) | Phase 6 |
-| Parallel agent progress UI | Phase 7 |
-| Auto memory writes (model-driven) | Phase 7 |
-| Smart structured compaction | Phase 7 |
-| Interrupt & resume mid-task | Phase 7 |
-| npm publish / `npx seedcode` | Phase 8 |
-| Debug mode + dry-run | Phase 8 |
-| Skills authoring CLI | Phase 8 |
+| Abort signal propagation (bug fix) | Phase 6 ✅ |
+| Network retry (429/503) | Phase 6 ✅ |
+| Atomic file writes | Phase 6 ✅ |
+| npm publish / `npx seedcode` | Phase 7 |
+| Debug mode + dry-run | Phase 7 |
+| Skills authoring CLI | Phase 7 |
 | Model quality | Out of scope (provider constraint) |
