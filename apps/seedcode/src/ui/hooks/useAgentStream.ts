@@ -113,7 +113,20 @@ export function useAgentStream({
     const onTaskChange = (items: import('../../tools/task.js').TaskItem[]) => {
       dispatch({ type: 'SET_ACTIVE_TASKS', tasks: items });
     };
-    const tools = buildTools({ cwd, confirm, askQuestion, skipConfirm, taskStore: taskStore.current, availableSkills: context.availableSkillsRef.current, model, onTaskChange });
+    const agentProgressLines: string[] = [];
+    const onSpawnAgentProgress = (info: { step: number; maxSteps: number; toolCalls: string[] }) => {
+      if (info.toolCalls.length > 0) {
+        agentProgressLines.push(...info.toolCalls);
+      }
+      // Show last 3 tool calls + step counter header
+      const recent = agentProgressLines.slice(-3);
+      const header = `Step ${info.step}/${info.maxSteps}`;
+      const progressText = recent.length > 0
+        ? `${header}\n${recent.join('\n')}`
+        : header;
+      dispatch({ type: 'UPDATE_TOOL_CALL_PROGRESS', toolName: 'spawnAgent', progress: progressText });
+    };
+    const tools = buildTools({ cwd, confirm, askQuestion, skipConfirm, taskStore: taskStore.current, availableSkills: context.availableSkillsRef.current, model, onTaskChange, onSpawnAgentProgress });
 
     const scheduleFlush = (text: string, done: boolean) => {
       accumulated = text;
@@ -165,8 +178,10 @@ export function useAgentStream({
       for (const id of pendingMediaIds) deleteMedia(id);
     }
 
-    // Declared outside try so we can await response after streaming
-    let streamResult: ReturnType<typeof streamText> | null = null;
+    // Declared outside try so we can await response after streaming.
+    // Type uses `typeof tools` to preserve the concrete tool map and avoid ToolSet variance issues.
+    type ToolsMap = typeof tools;
+    let streamResult: ReturnType<typeof streamText<ToolsMap>> | null = null;
 
     try {
       streamResult = streamText({
@@ -235,7 +250,7 @@ export function useAgentStream({
         },
       });
 
-      for await (const part of streamResult.fullStream) {
+      for await (const part of streamResult!.fullStream) {
         if (abortRef.current) break;
         if (part.type === 'reasoning-delta') {
           scheduleReasoningFlush(accReasoning + part.text);
@@ -254,7 +269,7 @@ export function useAgentStream({
           dispatch({
             type: 'PUSH_ACTIVE_TOOL_CALL',
             entry: {
-              id: part.toolCallId,
+              id: part.id,
               toolName: part.toolName as import('../../tools/index.js').ToolName,
               description: part.toolName,
               status: 'running',

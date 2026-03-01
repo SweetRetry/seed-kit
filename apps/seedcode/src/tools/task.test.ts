@@ -21,10 +21,12 @@ afterEach(() => {
   try { fs.unlinkSync(taskFilePath()); } catch { /* no-op */ }
 });
 
-// Helper: call tool.execute with proper AI SDK tool call shape
-// AI SDK tool.execute receives (input, options) — options can be empty object
-async function exec<T>(toolObj: { execute?: (...args: unknown[]) => Promise<T> }, input: Record<string, unknown>): Promise<T> {
-  return toolObj.execute!(input, {} as never);
+// Helper: call tool.execute with proper AI SDK tool call shape.
+// AI SDK v6 Tool.execute has (input: INPUT, options: ToolExecutionOptions) → T | PromiseLike<T> | AsyncIterable<T>.
+// We accept a generic Record and cast through the boundary since each tool has a unique INPUT type.
+async function exec<T>(toolObj: Record<string, unknown>, input: Record<string, unknown>): Promise<T> {
+  const fn = toolObj.execute as (input: unknown, options: unknown) => PromiseLike<unknown>;
+  return fn(input, {}) as Promise<T>;
 }
 
 // ── taskCreate ─────────────────────────────────────────────────────────────

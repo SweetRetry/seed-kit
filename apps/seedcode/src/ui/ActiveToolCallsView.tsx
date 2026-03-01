@@ -1,4 +1,5 @@
 import React, { memo } from 'react';
+import { Box } from 'ink';
 import { ToolCallLine, type ToolCallEntry } from './ToolCallView.js';
 
 interface ActiveToolCallsViewProps {
@@ -12,7 +13,7 @@ export const ActiveToolCallsView = memo(function ActiveToolCallsView({
 }: ActiveToolCallsViewProps) {
   if (calls.length === 0) return null;
   return (
-    <>
+    <Box flexDirection="column">
       {calls.map((tc) => (
         <ToolCallLine
           key={tc.id}
@@ -20,6 +21,6 @@ export const ActiveToolCallsView = memo(function ActiveToolCallsView({
           onConfirm={tc.status === 'pending' ? onConfirm : undefined}
         />
       ))}
-    </>
+    </Box>
   );
 });

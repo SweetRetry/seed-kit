@@ -185,8 +185,18 @@ export function ReplApp({ config: initialConfig, version, apiKey, onExit, onOpen
       context.sessionIdRef.current = newSessionId;
       clearMediaStore();
       stream.taskStore.current = createTaskStore(cwd, newSessionId);
+      // ANSI clear — wipe ink's <Static> output that is append-only
+      process.stdout.write('\x1b[2J\x1b[H');
       dispatch({ type: 'CLEAR' });
       context.loadContext();
+      // Re-push banner so the screen isn't blank after clear
+      const banner = buildBannerText({
+        version,
+        model: stateRef.current.liveConfig.model,
+        maskedKey: stateRef.current.liveConfig.apiKey ? stateRef.current.liveConfig.apiKey.slice(0, 6) + '...' + stateRef.current.liveConfig.apiKey.slice(-4) : '✗',
+        plan: stateRef.current.liveConfig.plan,
+      });
+      dispatch({ type: 'PUSH_STATIC', entry: { type: 'info', content: banner } });
       dispatch({ type: 'PUSH_STATIC', entry: { type: 'info', content: '✓ Conversation cleared. Context reloaded.' } });
       return;
     }

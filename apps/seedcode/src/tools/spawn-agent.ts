@@ -160,8 +160,44 @@ function buildSubAgentTools(cwd: string, taskStore: TaskStore) {
  * Sub-agents share the same model, CWD, and task store but run in isolation (no shared messages).
  * Multiple spawnAgent calls in a single step execute in parallel via AI SDK's parallel tool calls.
  */
-export function buildSpawnAgentTool(opts: { model: LanguageModel; cwd: string; taskStore: TaskStore }) {
-  const { model, cwd, taskStore } = opts;
+/** Produce a short summary like `Read(src/index.ts)` or `Grep(pattern in *.ts)` */
+function formatSubAgentToolCall(toolName: string, input?: Record<string, unknown>): string {
+  const NAMES: Record<string, string> = {
+    read: 'Read', glob: 'Glob', grep: 'Grep', bash: 'Bash',
+    webSearch: 'Search', webFetch: 'Fetch',
+    taskList: 'TaskList', taskGet: 'TaskGet', taskUpdate: 'TaskUpdate',
+  };
+  const name = NAMES[toolName] ?? toolName;
+  if (!input) return name;
+
+  let desc = '';
+  switch (toolName) {
+    case 'read': desc = String(input.path ?? ''); break;
+    case 'glob': desc = String(input.pattern ?? ''); break;
+    case 'grep': desc = `${input.pattern ?? ''} in ${input.fileGlob ?? ''}`; break;
+    case 'bash': desc = String(input.command ?? ''); break;
+    case 'webSearch': desc = String(input.query ?? ''); break;
+    case 'webFetch': desc = String(input.url ?? ''); break;
+    default: return name;
+  }
+  if (desc.length > 60) desc = desc.slice(0, 57) + '…';
+  return desc ? `${name}(${desc})` : name;
+}
+
+export interface SpawnAgentProgressInfo {
+  step: number;
+  maxSteps: number;
+  /** Summary of each tool call in this step, e.g. ["Grep(handleSubmit in src/*.ts)", "Read(src/ui/ReplApp.tsx)"] */
+  toolCalls: string[];
+}
+
+export function buildSpawnAgentTool(opts: {
+  model: LanguageModel;
+  cwd: string;
+  taskStore: TaskStore;
+  onProgress?: (info: SpawnAgentProgressInfo) => void;
+}) {
+  const { model, cwd, taskStore, onProgress } = opts;
 
   return tool({
     description:
@@ -187,7 +223,20 @@ export function buildSpawnAgentTool(opts: { model: LanguageModel; cwd: string; t
           ? `Context:\n${context}\n\nTask:\n${task}`
           : task;
 
-        const result = await subAgent.generate({ prompt });
+        const result = await subAgent.generate({
+          prompt,
+          onStepFinish: (step) => {
+            const summaries = (step.toolCalls ?? []).map((tc) => {
+              const input = tc.input as Record<string, unknown> | undefined;
+              return formatSubAgentToolCall(tc.toolName, input);
+            });
+            onProgress?.({
+              step: step.stepNumber + 1,
+              maxSteps: MAX_SUBAGENT_STEPS,
+              toolCalls: summaries,
+            });
+          },
+        });
         let text = result.text ?? '(sub-agent returned no text)';
         if (text.length > MAX_SUBAGENT_OUTPUT_CHARS) {
           text = text.slice(0, MAX_SUBAGENT_OUTPUT_CHARS) + '\n\n[output truncated — exceeded 8k char limit]';

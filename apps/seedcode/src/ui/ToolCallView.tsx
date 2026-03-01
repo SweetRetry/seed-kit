@@ -15,6 +15,8 @@ export interface ToolCallEntry {
   description: string;
   status: ToolCallStatus;
   output?: string;
+  /** Live progress text for long-running tools (e.g. sub-agent steps) */
+  progress?: string;
 }
 
 /** Pretty display name in function-call style: `Read(src/index.ts)` */
@@ -96,6 +98,14 @@ export function ToolCallLine({ entry, onConfirm }: ToolCallLineProps) {
           {label}
         </Text>
       </Box>
+
+      {/* Live progress lines for running agents */}
+      {isRunning && entry.progress && entry.progress.split('\n').map((line, i) => (
+        <Box key={i} marginLeft={3} gap={1}>
+          <Text dimColor>⎿</Text>
+          <Text dimColor>{line}</Text>
+        </Box>
+      ))}
 
       {/* Result line with ⎿ tree connector */}
       {isDone && entry.output && (

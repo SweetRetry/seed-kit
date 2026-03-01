@@ -11,7 +11,7 @@ import { captureScreenshot, getDisplayList } from './screenshot.js';
 import { createTaskStore } from './task.js';
 import { loadSkillBody, type SkillEntry } from '../context/skills.js';
 import { runDiagnostics, formatDiagnostics } from './diagnostics.js';
-import { buildSpawnAgentTool } from './spawn-agent.js';
+import { buildSpawnAgentTool, type SpawnAgentProgressInfo } from './spawn-agent.js';
 
 export type ToolName = 'read' | 'edit' | 'write' | 'glob' | 'grep' | 'bash' | 'webSearch' | 'webFetch' | 'screenshot' | 'taskCreate' | 'taskUpdate' | 'taskGet' | 'taskList' | 'askQuestion' | 'loadSkill' | 'spawnAgent';
 
@@ -68,8 +68,9 @@ export function buildTools(opts: {
   availableSkills: SkillEntry[];
   model: LanguageModel;
   onTaskChange?: TaskChangeFn;
+  onSpawnAgentProgress?: (info: SpawnAgentProgressInfo) => void;
 }) {
-  const { cwd, confirm, askQuestion, skipConfirm, taskStore, availableSkills, model, onTaskChange } = opts;
+  const { cwd, confirm, askQuestion, skipConfirm, taskStore, availableSkills, model, onTaskChange, onSpawnAgentProgress } = opts;
 
   const requestConfirm = (
     toolName: ToolName,
@@ -82,18 +83,24 @@ export function buildTools(opts: {
     });
   };
 
-  // Wrap a task tool's execute to fire the onTaskChange callback
-  function wrapTaskTool<T extends { execute?: (...args: unknown[]) => Promise<unknown> }>(t: T): T {
-    if (!onTaskChange || !t.execute) return t;
-    const original = t.execute;
+  // Wrap a task tool's execute to fire the onTaskChange callback.
+  // Each AI SDK Tool has a unique (input, options) → result signature, so we use
+  // a structural pick that only requires `execute` to exist as a function.
+  function wrapTaskTool<T extends Record<string, unknown>>(t: T): T {
+    if (!onTaskChange) return t;
+    const exec = t.execute;
+    if (typeof exec !== 'function') return t;
+    const original = exec as (...a: never[]) => Promise<unknown>;
     return {
       ...t,
-      execute: async (...args: unknown[]) => {
-        const result = await original(...args);
-        onTaskChange(Array.from(taskStore.items.values()).filter((i) => i.status !== 'deleted'));
-        return result;
+      execute(...a: never[]) {
+        const result = original.apply(this, a);
+        return Promise.resolve(result).then((r) => {
+          onTaskChange(Array.from(taskStore.items.values()).filter((i) => i.status !== 'deleted'));
+          return r;
+        });
       },
-    };
+    } as T;
   }
 
   return {
@@ -354,7 +361,7 @@ export function buildTools(opts: {
     taskUpdate: wrapTaskTool(taskStore.taskUpdate),
     taskGet: taskStore.taskGet,
     taskList: taskStore.taskList,
-    spawnAgent: buildSpawnAgentTool({ model, cwd, taskStore }),
+    spawnAgent: buildSpawnAgentTool({ model, cwd, taskStore, onProgress: onSpawnAgentProgress }),
   };
 }
 

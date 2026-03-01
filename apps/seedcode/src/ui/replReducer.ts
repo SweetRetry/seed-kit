@@ -57,6 +57,7 @@ export type Action =
   | { type: 'SET_RESUME_SESSIONS'; sessions: SessionEntry[] | null }
   | { type: 'SET_MEMORY_PICKER'; value: boolean }
   | { type: 'SET_STEP'; step: number }
+  | { type: 'UPDATE_TOOL_CALL_PROGRESS'; toolName: string; progress: string }
   | { type: 'CLEAR' };
 
 export function replReducer(state: AppState, action: Action): AppState {
@@ -164,6 +165,19 @@ export function replReducer(state: AppState, action: Action): AppState {
 
     case 'SET_STEP':
       return { ...state, currentStep: action.step };
+
+    case 'UPDATE_TOOL_CALL_PROGRESS': {
+      // Update progress on the first matching running tool call
+      let found = false;
+      const updated = state.activeToolCalls.map((tc) => {
+        if (!found && tc.toolName === action.toolName && tc.status === 'running') {
+          found = true;
+          return { ...tc, progress: action.progress };
+        }
+        return tc;
+      });
+      return found ? { ...state, activeToolCalls: updated } : state;
+    }
 
     case 'CLEAR':
       return {
